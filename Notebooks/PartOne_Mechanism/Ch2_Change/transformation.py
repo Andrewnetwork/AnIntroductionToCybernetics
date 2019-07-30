@@ -4,8 +4,16 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from condense_transformation import compose_fn_ls
-from itertools import repeat
 import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+
+
+def repeat(elm, n):
+    out = []
+    for i in range(n):
+        out.append(elm)
+    return out
 
 
 def index_dict(ls):
@@ -13,6 +21,7 @@ def index_dict(ls):
     for i in range(len(ls)):
         dict_out[ls[i]] = i
     return dict_out
+
 
 def flatten_list(ls):
     out_ls = []
@@ -42,6 +51,17 @@ class FiniteTransformation:
         out = []
         for i in sorted(list(self.domain)):
             out.append((i, self.operator(i)))
+        return out
+
+    def transitions_flat(self):
+        out = []
+        for i in sorted(list(self.domain)):
+            transform = self.operator(i)
+            if not isinstance(transform, list):
+                transform = [transform]
+            for t in transform:
+                out.append((i, t))
+
         return out
 
     def closed(self):
@@ -84,31 +104,52 @@ class FiniteTransformation:
         return pd.DataFrame(np.array(columns).T, index=list(self.range), columns=list(self.domain))
 
     def is_one_one(self):
-        for index, row in self.matrix_representation().iterrows():
-            if not sum(row) <= 1:
-                return False
-        return True
+        if len(self.range) == 0:
+            return True
+        else:
+            for index, row in self.matrix_representation().iterrows():
+                if not sum(row) <= 1:
+                    return False
+            return True
 
     def is_single_valued(self):
-        for index, row in self.matrix_representation().T.iterrows():
-            if not sum(row) <= 1:
-                return False
-        return True
+        if len(self.range) == 0:
+            return True
+        else:
+            for index, row in self.matrix_representation().T.iterrows():
+                if not sum(row) <= 1:
+                    return False
+            return True
 
     def power(self, n):
-        return FiniteTransformation.operator_to_transformation(compose_fn_ls(repeat(self.operator, n)), self.domain)
+        if n == 1:
+            return self
+        else:
+            return self * self.power(n-1)
 
-    @staticmethod
-    def operator_to_transformation(operator, domain):
-        class TmpClass(FiniteTransformation):
-            def __init__(self):
-                self.domain = domain
+    def power_chain(self, tansformation, initial_value, n, cntr=1):
+        if cntr >= n:
+            return initial_value
+        else:
+            return [initial_value,
+                    *self.power_chain(tansformation, tansformation.power(cntr).operator(initial_value), n, cntr + 1)]
 
-            def operator(self, operand):
-                super().operator(operand)
-                return operator(operand)
+    def kinematic_graph(self):
+        g = nx.DiGraph()
 
-        return TmpClass()
+        if self.is_single_valued():
+            g.add_edges_from(self.transitions())
+        else:
+            g.add_edges_from(self.transitions_flat())
+
+        pos = nx.spring_layout(g, k=2.5, iterations=300)
+        plt.figure(3, figsize=(12, 6))
+        nx.draw_networkx(g, pos, node_color="white", arrows=True)
+        nx.draw_networkx_labels(g, pos)
+        plt.show()
+
+    def __mul__(self, other):
+        return FiniteTransformation(other.domain, compose_fn_ls([other._operator, self._operator]))
 
     @staticmethod
     def matrix_to_transformation(mat):
@@ -125,6 +166,15 @@ class FiniteTransformation:
                         operandMap[column_i] = [row_i]
 
         return FiniteTransformation(list(operandMap.keys()), lambda operand: operandMap[operand])
+
+    @staticmethod
+    def transitions_to_transformation(transitions):
+        transform_dict = {}
+        for (operand, transform) in transitions:
+            transform_dict[operand] = transform
+
+        return FiniteTransformation(list(transform_dict.keys()), lambda operand: transform_dict[operand])
+
 
 
 class InfiniteTransformation(FiniteTransformation):
