@@ -34,7 +34,30 @@ def flatten_list(ls):
     return out_ls
 
 
-class FiniteTransformation:
+class Transformation(ABC):
+    @abstractmethod
+    def operator(self, operand):
+        pass
+
+    @abstractmethod
+    def __mul__(self, other):
+        pass
+
+    def power(self, n):
+        if n == 1:
+            return self
+        else:
+            return self * self.power(n - 1)
+
+    def power_chain(self, initial_value, n, cntr=1):
+        if cntr >= n:
+            return [initial_value]
+        else:
+            return [initial_value,
+                    *self.power_chain(self.operator(initial_value), n, cntr + 1)]
+
+
+class FiniteTransformation(Transformation):
     def __init__(self, domain, operator):
         self.domain = sorted(set(domain))
         self._operator = operator
@@ -121,19 +144,6 @@ class FiniteTransformation:
                     return False
             return True
 
-    def power(self, n):
-        if n == 1:
-            return self
-        else:
-            return self * self.power(n-1)
-
-    def power_chain(self, tansformation, initial_value, n, cntr=1):
-        if cntr >= n:
-            return initial_value
-        else:
-            return [initial_value,
-                    *self.power_chain(tansformation, tansformation.power(cntr).operator(initial_value), n, cntr + 1)]
-
     def kinematic_graph(self):
         g = nx.DiGraph()
 
@@ -175,44 +185,41 @@ class FiniteTransformation:
 
         return FiniteTransformation(list(transform_dict.keys()), lambda operand: transform_dict[operand])
 
+    @staticmethod
+    def list_to_transformation(ls):
+        transitions = []
+        for i in range(len(ls) - 1):
+            transitions.append((ls[i], ls[i + 1]))
+        return FiniteTransformation.transitions_to_transformation(transitions)
 
 
-class InfiniteTransformation(FiniteTransformation):
-    def __init__(self):
-        self.operandFunction = None
-        self.transformFunction = None
+class InfiniteTransformation(Transformation):
+    def __init__(self, domain_function, operator):
+        self.domain_function = domain_function
+        self._operator = operator
 
-    @abstractmethod
+    def __mul__(self, other):
+        return InfiniteTransformation(self.domain_function, compose_fn_ls([other._operator, self._operator]))
+
     def operator(self, operand):
         # Returns a transform.
-        if not self.is_an_operand(operand):
-            raise Exception("Domain Error!")
+        return self._operator(operand)
 
-    def is_an_operand(self, x):
-        # Checks to see if x is an operand. Assumes convexity.
-        guess = 1
-        reversing = False
-        while True:
-            result = self.operandFunction(guess)
-            if x > result:
-                if not reversing:
-                    guess *= 2
-                else:
-                    # We are oscillating
-                    return False
-            elif x == result:
-                return True
-            else:
-                reversing = True
-                guess -= 1
+    def transitions(self, n):
+        out = []
+        for i in range(n):
+            d = self.domain_function(i)
+            out.append((d, self._operator(d)))
+        return out
 
-    def closed(self, start=1, stop=100):
-        """
-        Check if this transformation is closed on a range of operands.
-        """
-        for i in range(start, stop):
-            if not self.is_an_operand(self.transformFunction(self.operandFunction(i))):
-                return False
-        return True
+    def kinematic_graph(self, n):
+        g = nx.DiGraph()
+        g.add_edges_from(self.transitions(n))
+        pos = nx.spring_layout(g, k=2.5, iterations=300)
+        plt.figure(3, figsize=(12, 6))
+        nx.draw_networkx(g, pos, node_color="white", arrows=True)
+        nx.draw_networkx_labels(g, pos)
+        plt.show()
+
 
 
