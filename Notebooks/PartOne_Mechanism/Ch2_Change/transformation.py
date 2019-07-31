@@ -193,6 +193,41 @@ class FiniteTransformation(Transformation):
         return FiniteTransformation.transitions_to_transformation(transitions)
 
 
+class VectorTransformation(Transformation):
+    def __init__(self, is_operand, component_functions):
+        if isinstance(component_functions, list):
+            def tmp_fn(vector):
+                out_vector = []
+                for fn in component_functions:
+                    out_vector.append(fn(vector))
+                return out_vector
+
+            self.n_components = len(component_functions)
+            self._operator = tmp_fn
+        else:
+            self._operator = component_functions
+
+        self.is_operand = is_operand
+
+
+    def operator(self, operand):
+        if isinstance(operand, list) and len(operand) == self.n_components and self.is_operand(operand):
+            return self._operator(operand)
+        else:
+            raise Exception("Domain Error!")
+
+    def __pow__(self, n):
+        return self.power(n)
+
+    def __mul__(self, other):
+        tmp = VectorTransformation(self.is_operand, compose_fn_ls([other._operator, self._operator]))
+        tmp.n_components = self.n_components
+        return tmp
+
+    def __call__(self, operand):
+        return self.operator(operand)
+
+
 class InfiniteTransformation(Transformation):
     def __init__(self, domain_function, operator):
         self.domain_function = domain_function
