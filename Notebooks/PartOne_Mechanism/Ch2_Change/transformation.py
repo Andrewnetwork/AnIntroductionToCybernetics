@@ -194,7 +194,7 @@ class FiniteTransformation(Transformation):
 
 
 class VectorTransformation(Transformation):
-    def __init__(self, is_operand, component_functions):
+    def __init__(self, component_functions, is_operand=lambda x: True):
         if isinstance(component_functions, list):
             def tmp_fn(vector):
                 out_vector = []
@@ -208,7 +208,6 @@ class VectorTransformation(Transformation):
             self._operator = component_functions
 
         self.is_operand = is_operand
-
 
     def operator(self, operand):
         if isinstance(operand, list) and len(operand) == self.n_components and self.is_operand(operand):
